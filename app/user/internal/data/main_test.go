@@ -42,3 +42,8 @@ func TestMain(m *testing.M) {
 
     os.Exit(m.Run())
 }
+
+func clearTestUserData() error {
+    _, err := testData.db.ExecContext(context.Background(), "delete from user")
+    return err
+}

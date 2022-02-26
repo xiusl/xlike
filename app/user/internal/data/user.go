@@ -3,7 +3,10 @@ package data
 import (
     "context"
     "database/sql"
+    "errors"
     "fmt"
+    "math"
+    "strings"
     "time"
     "xlike/app/user/internal/biz"
     "xlike/pkg/utils"
@@ -15,8 +18,8 @@ var (
     getUserByMobileSql    = "select id, mobile, nick_name, avatar, state, memo, last_seen, version, del, created_at, updated_at from user where mobile=? and del=0"
     updateUserSql = "update user set mobile=?, nick_name=?, avatar=?, state=?, memo=? where id=?"
     deleteUserSql = "update user set del=1 where id=?"
-    listUserByCursorSql = "select id, mobile, nick_name, avatar, state, memo, last_seen, version, del, created_at, updated_at from user where id > ? limit ?"
-    listUserByCursorDescSql = "select id, mobile, nick_name, avatar, state, memo, last_seen, version, del, created_at, updated_at from user where id < ? limit ?"
+    listUserByCursorSql = "select id, mobile, nick_name, avatar, state, memo, last_seen, version, del, created_at, updated_at from user where id > ? order by id limit ?"
+    listUserByCursorDescSql = "select id, mobile, nick_name, avatar, state, memo, last_seen, version, del, created_at, updated_at from user where id < ?  order by id desc limit ?"
     listUserByIDsSql = "select id, mobile, nick_name, avatar, state, memo, last_seen, version, del, created_at, updated_at from user where id in (%s)"
 )
 
@@ -99,9 +102,12 @@ func (r *userRepo) UpdateUser(ctx context.Context, u *biz.User) (*biz.User, erro
     if err != nil {
         return nil, err
     }
-    _, err = res.RowsAffected()
+    num, err := res.RowsAffected()
     if err != nil {
         return nil, err
+    }
+    if num == 0 {
+        return nil, errors.New("no row affected")
     }
     return u, nil
 }
@@ -112,16 +118,22 @@ func (r *userRepo) DeleteUser(ctx context.Context, ID int64) error {
     if err != nil {
         return err
     }
-    _, err = res.RowsAffected()
+    num, err := res.RowsAffected()
     if err != nil {
         return err
+    }
+    if num == 0 {
+        return errors.New("no row affected")
     }
     return nil
 }
 
 // ListUserByIDs is .
 func (r *userRepo) ListUserByIDs(ctx context.Context, IDs []int64) ([]*biz.User, error) {
-    sqlStr := fmt.Sprintf(listUserByIDsSql, utils.IntsToStrs(IDs))
+    if len(IDs) == 0 {
+        return []*biz.User{}, nil
+    }
+    sqlStr := fmt.Sprintf(listUserByIDsSql, strings.Join(utils.IntsToStrs(IDs), ","))
     rows, err := r.data.db.QueryContext(ctx, sqlStr)
     if err != nil {
         return nil, err
@@ -140,6 +152,9 @@ func (r *userRepo) ListUserByCursor(ctx context.Context, cursor int64, count int
 
 // ListUserByCursorDesc is
 func (r *userRepo) ListUserByCursorDesc(ctx context.Context, cursor int64, count int) ([]*biz.User, error) {
+    if cursor <= 0 {
+        cursor = math.MaxInt64
+    }
     rows, err := r.data.db.QueryContext(ctx, listUserByCursorDescSql, cursor, count)
     if err != nil {
         return nil, err
